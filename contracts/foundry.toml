@@ -1,0 +1,27 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.24"
+optimizer = true
+optimizer_runs = 200
+via_ir = false
+
+# Enable EVM version that supports EIP-7702
+evm_version = "cancun"
+
+# Remappings
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+]
+
+# Testing
+fuzz = { runs = 256 }
+verbosity = 2
+
+[profile.default.rpc_endpoints]
+sepolia = "${SEPOLIA_RPC_URL}"
+mainnet = "${MAINNET_RPC_URL}"
+
+[profile.default.etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY}" }

@@ -1,0 +1,56 @@
+# Compiled binary
+eip7702-inspector
+eip7702-inspector.exe
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Coverage output
+*.out
+coverage.html
+coverage.txt
+
+# Go module cache (if vendor mode used)
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Private keys (never commit!)
+*.pem
+*.key
+privatekey*
+
+# Temporary files
+tmp/
+*.tmp
+*.log
+
+# Debug files
+debug/
+*.debug
+
+# Foundry (contracts directory has its own .gitignore)
+# These are backup patterns in case files are created at root
+/cache/
+/out/
