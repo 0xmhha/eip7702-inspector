@@ -21,38 +21,38 @@ go build
 
 ## Deployed Contracts (Sepolia Testnet)
 
-EIP-7702 테스트를 위한 스마트 컨트랙트가 Sepolia에 배포되어 있습니다:
+Smart contracts for EIP-7702 testing are deployed on Sepolia:
 
 | Contract | Address | Description |
 |----------|---------|-------------|
-| **BatchExecutor** | [`0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85`](https://sepolia.etherscan.io/address/0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85) | 배치 트랜잭션 실행 |
-| **SimpleAccount** | [`0x62DAAf50Fab4Bb37BF2C94C9F308fAD90EfE7152`](https://sepolia.etherscan.io/address/0x62DAAf50Fab4Bb37BF2C94C9F308fAD90EfE7152) | ERC-4337 호환 AA 계정 |
-| **MultisigLogic** | [`0xfdBEC6aD9A98A2e9bF1cf740A2FDe3Bf15b78CfC`](https://sepolia.etherscan.io/address/0xfdBEC6aD9A98A2e9bF1cf740A2FDe3Bf15b78CfC) | N-of-M 다중 서명 |
-| **SessionKeyManager** | [`0xc0EE9C061ABfC80bd96a130CCAb053c7ED7B4d0B`](https://sepolia.etherscan.io/address/0xc0EE9C061ABfC80bd96a130CCAb053c7ED7B4d0B) | 세션 키 관리 |
-| **PaymasterHelper** | [`0x362BF4810C647AF570Bb6F6c583b53c422C026Bf`](https://sepolia.etherscan.io/address/0x362BF4810C647AF570Bb6F6c583b53c422C026Bf) | 가스비 대납 통합 |
+| **BatchExecutor** | [`0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85`](https://sepolia.etherscan.io/address/0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85) | Batch transaction execution |
+| **SimpleAccount** | [`0x62DAAf50Fab4Bb37BF2C94C9F308fAD90EfE7152`](https://sepolia.etherscan.io/address/0x62DAAf50Fab4Bb37BF2C94C9F308fAD90EfE7152) | ERC-4337 compatible AA account |
+| **MultisigLogic** | [`0xfdBEC6aD9A98A2e9bF1cf740A2FDe3Bf15b78CfC`](https://sepolia.etherscan.io/address/0xfdBEC6aD9A98A2e9bF1cf740A2FDe3Bf15b78CfC) | N-of-M multisig |
+| **SessionKeyManager** | [`0xc0EE9C061ABfC80bd96a130CCAb053c7ED7B4d0B`](https://sepolia.etherscan.io/address/0xc0EE9C061ABfC80bd96a130CCAb053c7ED7B4d0B) | Session key management |
+| **PaymasterHelper** | [`0x362BF4810C647AF570Bb6F6c583b53c422C026Bf`](https://sepolia.etherscan.io/address/0x362BF4810C647AF570Bb6F6c583b53c422C026Bf) | Gas sponsorship integration |
 
 **Network**: Sepolia (Chain ID: 11155111)
 **EntryPoint (ERC-4337)**: `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789`
 
 ## Usage
 
-### Quick Verification (오프라인)
+### Quick Verification (Offline)
 
 ```bash
 ./eip7702-inspector -quick
 ```
 
-### Full Inspection (오프라인)
+### Full Inspection (Offline)
 
 ```bash
 ./eip7702-inspector -verbose
 ```
 
-### Network Testing (Sepolia 테스트넷)
+### Network Testing (Sepolia Testnet)
 
-실제 네트워크에서 EIP-7702 트랜잭션을 테스트합니다.
+Test EIP-7702 transactions on a live network.
 
-#### 프라이빗 키 사용
+#### Using Private Key
 
 ```bash
 ./eip7702-inspector -network \
@@ -61,7 +61,7 @@ EIP-7702 테스트를 위한 스마트 컨트랙트가 Sepolia에 배포되어 �
   -target "0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85"
 ```
 
-#### 니모닉 사용
+#### Using Mnemonic
 
 ```bash
 ./eip7702-inspector -network \
@@ -70,22 +70,22 @@ EIP-7702 테스트를 위한 스마트 컨트랙트가 Sepolia에 배포되어 �
   -target "0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85"
 ```
 
-#### 컨트랙트별 테스트 예시
+#### Contract-Specific Test Examples
 
 ```bash
-# BatchExecutor로 위임 테스트
+# Delegate to BatchExecutor
 ./eip7702-inspector -network \
   -rpc "https://ethereum-sepolia-rpc.publicnode.com" \
   -key "0x..." \
   -target "0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85"
 
-# MultisigLogic으로 위임 테스트
+# Delegate to MultisigLogic
 ./eip7702-inspector -network \
   -rpc "https://ethereum-sepolia-rpc.publicnode.com" \
   -key "0x..." \
   -target "0xfdBEC6aD9A98A2e9bF1cf740A2FDe3Bf15b78CfC"
 
-# SessionKeyManager로 위임 테스트
+# Delegate to SessionKeyManager
 ./eip7702-inspector -network \
   -rpc "https://ethereum-sepolia-rpc.publicnode.com" \
   -key "0x..." \
@@ -105,9 +105,9 @@ EIP-7702 테스트를 위한 스마트 컨트랙트가 Sepolia에 배포되어 �
 | `-rpc` | RPC URL for network testing | http://localhost:8545 |
 | `-target` | Target contract address for delegation | 0x42 |
 
-### 주의사항
+### Security Notice
 
-⚠️ **보안**: 커맨드 라인에 프라이빗 키나 니모닉을 직접 입력하면 쉘 히스토리에 저장됩니다. 프로덕션 환경에서는 환경변수를 사용하세요.
+> **Warning**: Private keys or mnemonics entered on the command line are stored in shell history. Use environment variables in production:
 
 ```bash
 export PRIVATE_KEY="0x..."
@@ -169,12 +169,12 @@ Based on EIP-7702 specification:
 
 ```go
 type SetCodeAuthorization struct {
-    ChainID uint256     // Chain ID (0 = any chain)
+    ChainID uint256         // Chain ID (0 = any chain)
     Address common.Address  // Target contract address
-    Nonce   uint64      // Account nonce
-    V       uint8       // Signature V
-    R       uint256     // Signature R
-    S       uint256     // Signature S
+    Nonce   uint64          // Account nonce
+    V       uint8           // Signature V
+    R       uint256         // Signature R
+    S       uint256         // Signature S
 }
 ```
 
@@ -210,79 +210,62 @@ insp := inspector.NewInspector(chainID, privateKeyHex)
 report, err := insp.RunFullInspection()
 ```
 
-## Test Sources
-
-This inspector's test patterns are derived from:
-
-### go-ethereum
-
-- `core/types/tx_setcode.go`: Core EIP-7702 implementation
-- `core/types/tx_setcode_test.go`: Delegation parsing tests
-- `core/blockchain_test.go`: Integration tests (TestEIP7702)
-- `core/state_processor_test.go`: Error handling tests
-
-### reth
-
-- `crates/transaction-pool/src/error.rs`: EIP-7702 error types
-- `crates/storage/codecs/src/alloy/authorization_list.rs`: Authorization encoding
-- `crates/payload/validator/src/prague.rs`: Prague field validation
-
 ## Smart Contracts
 
-EIP-7702 위임 대상으로 사용할 수 있는 스마트 컨트랙트들이 `contracts/` 디렉토리에 있습니다.
+Smart contracts available for EIP-7702 delegation are located in the `contracts/` directory.
 
-### 컨트랙트 설명
+### Contract Descriptions
 
 | Contract | Description | Use Case |
 |----------|-------------|----------|
-| **BatchExecutor** | 여러 호출을 하나의 트랜잭션으로 실행 | DeFi 배치 작업, 다중 전송 |
-| **SimpleAccount** | ERC-4337 EntryPoint와 호환되는 AA 계정 | Account Abstraction |
-| **MultisigLogic** | N-of-M 다중 서명 요구 | 공동 관리 계정 |
-| **SessionKeyManager** | 제한된 권한의 임시 키 발급 | 게임, dApp 세션 |
-| **PaymasterHelper** | Paymaster 통합으로 가스비 대납 | 가스리스 트랜잭션 |
+| **BatchExecutor** | Execute multiple calls in one transaction | DeFi batch operations, multi-transfers |
+| **SimpleAccount** | ERC-4337 EntryPoint compatible AA account | Account Abstraction |
+| **MultisigLogic** | N-of-M multisig requirement | Jointly managed accounts |
+| **SessionKeyManager** | Issue temporary keys with limited permissions | Games, dApp sessions |
+| **PaymasterHelper** | Paymaster integration for gas sponsorship | Gasless transactions |
 
-### 컨트랙트 빌드 및 배포
+### Build and Deploy Contracts
 
 ```bash
 cd contracts
 
-# 빌드
+# Build
 forge build
 
-# 테스트
+# Test
 forge test -vv
 
-# Sepolia 배포
+# Deploy to Sepolia
 export PRIVATE_KEY=0x...
 forge script script/Deploy.s.sol:Deploy \
   --rpc-url https://ethereum-sepolia-rpc.publicnode.com \
   --broadcast
 ```
 
-### EIP-7702 흐름도
+### EIP-7702 Flow Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        EIP-7702 Flow                            │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  1. EOA가 SetCodeAuthorization 서명                              │
+│  1. EOA signs SetCodeAuthorization                              │
 │     ┌──────────────┐                                            │
-│     │     EOA      │ ──sign──> Authorization{target, nonce}    │
+│     │     EOA      │ ──sign──> Authorization{target, nonce}     │
 │     └──────────────┘                                            │
 │                                                                 │
-│  2. SetCode 트랜잭션 전송 (type 0x04)                            │
+│  2. Send SetCode transaction (type 0x04)                        │
 │     ┌──────────────┐      ┌──────────────┐                      │
 │     │     EOA      │ ──TX──>│   Network   │                     │
 │     └──────────────┘      └──────────────┘                      │
 │                                                                 │
-│  3. EOA 코드가 위임 코드로 설정됨                                 │
+│  3. EOA code is set to delegation code                          │
 │     ┌──────────────┐      ┌──────────────┐                      │
-│     │     EOA      │──────│ 0xef0100... │ (delegation prefix)  │
+│     │     EOA      │──────│ 0xef0100... │ (delegation prefix)   │
 │     │  (has code)  │      │ + target    │                       │
 │     └──────────────┘      └──────────────┘                      │
 │                                                                 │
-│  4. EOA가 컨트랙트 함수 호출 가능                                 │
+│  4. EOA can call contract functions                             │
 │     ┌──────────────┐      ┌──────────────┐                      │
 │     │     EOA      │──call──>│BatchExecutor│                    │
 │     │              │      │.executeBatch()│                     │
@@ -297,11 +280,11 @@ forge script script/Deploy.s.sol:Deploy \
 
 ## Example Transactions (Sepolia Testnet)
 
-실제 Sepolia 테스트넷에서 실행된 EIP-7702 트랜잭션 예제입니다.
+Example EIP-7702 transactions executed on Sepolia testnet.
 
-### 1. SetCode Transaction (EIP-7702 Delegation 설정)
+### 1. SetCode Transaction (EIP-7702 Delegation Setup)
 
-EOA에 BatchExecutor 컨트랙트를 delegation으로 설정합니다.
+Sets BatchExecutor contract as delegation for the EOA.
 
 | Item | Value |
 |------|-------|
@@ -310,9 +293,9 @@ EOA에 BatchExecutor 컨트랙트를 delegation으로 설정합니다.
 | **Target Contract** | `0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85` (BatchExecutor) |
 | **Tx Type** | `0x04` (SetCode) |
 
-### 2. Batch Execution (EIP-7702를 통한 실제 기능 실행)
+### 2. Batch Execution (Function Execution via EIP-7702)
 
-Delegation이 설정된 EOA에서 `executeBatch()` 함수를 호출하여 여러 주소로 ETH를 전송합니다.
+Calls `executeBatch()` from the delegated EOA to send ETH to multiple addresses.
 
 | Item | Value |
 |------|-------|
@@ -320,11 +303,11 @@ Delegation이 설정된 EOA에서 `executeBatch()` 함수를 호출하여 여러
 | **Caller (EOA)** | `0x309F618825AfaCFCb532ba47420106F766B84048` |
 | **Tx Type** | `0x02` (EIP-1559) |
 
-### 동작 설명
+### How It Works
 
-1. **EOA** (`0x309F618825AfaCFCb532ba47420106F766B84048`)에 **BatchExecutor** 컨트랙트 (`0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85`) delegation 설정
-2. EIP-1559 트랜잭션으로 자신(EOA)을 호출하며 `executeBatch()` 함수 실행
-3. 0.0001 ETH씩 2개 주소로 전송:
+1. **EOA** (`0x309F618825AfaCFCb532ba47420106F766B84048`) sets **BatchExecutor** contract (`0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85`) as delegation
+2. EIP-1559 transaction calls self (EOA) with `executeBatch()` function
+3. Sends 0.0001 ETH each to 2 addresses:
    - `0x000000000000000000000000000000000000dEaD` (burn address)
    - `0x0000000000000000000000000000000000000001` (ecrecover precompile)
 
@@ -334,13 +317,13 @@ Delegation이 설정된 EOA에서 `executeBatch()` 함수를 호출하여 여러
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                       │
 │  Step 1: SetCode Transaction (type 0x04)                              │
-│  ┌─────────────────┐      ┌─────────────────┐                        │
-│  │       EOA       │─────>│   BatchExecutor │                        │
-│  │ 0x309F61...     │      │   0xA6E8CF...   │                        │
-│  └─────────────────┘      └─────────────────┘                        │
+│  ┌─────────────────┐      ┌─────────────────┐                         │
+│  │       EOA       │─────>│   BatchExecutor │                         │
+│  │ 0x309F61...     │      │   0xA6E8CF...   │                         │
+│  └─────────────────┘      └─────────────────┘                         │
 │         │                                                             │
 │         ▼                                                             │
-│  EOA Code: 0xef0100a6e8cf0671563914489f2ec2436cebccd17b7a85          │
+│  EOA Code: 0xef0100a6e8cf0671563914489f2ec2436cebccd17b7a85           │
 │                                                                       │
 │  Step 2: Batch Execution (type 0x02)                                  │
 │  ┌─────────────────┐                                                  │
@@ -358,6 +341,23 @@ Delegation이 설정된 EOA에서 `executeBatch()` 함수를 호출하여 여러
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
+## Test Sources
+
+This inspector's test patterns are derived from:
+
+### go-ethereum
+
+- `core/types/tx_setcode.go`: Core EIP-7702 implementation
+- `core/types/tx_setcode_test.go`: Delegation parsing tests
+- `core/blockchain_test.go`: Integration tests (TestEIP7702)
+- `core/state_processor_test.go`: Error handling tests
+
+### reth
+
+- `crates/transaction-pool/src/error.rs`: EIP-7702 error types
+- `crates/storage/codecs/src/alloy/authorization_list.rs`: Authorization encoding
+- `crates/payload/validator/src/prague.rs`: Prague field validation
+
 ## Related Projects
 
 - **go-stablenet**: go-ethereum fork with EIP-7702 and fee delegation
@@ -366,4 +366,4 @@ Delegation이 설정된 EOA에서 `executeBatch()` 함수를 호출하여 여러
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
