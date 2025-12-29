@@ -1,7 +1,7 @@
-// EIP-7702 Inspector - A comprehensive verification tool for EIP-7702 implementations
+// EIP-7702 Inspector - A comprehensive verification and security analysis tool for EIP-7702 implementations
 //
 // This tool provides verification of EIP-7702 (EOA Code Delegation) implementations
-// based on test patterns from go-ethereum and reth.
+// based on test patterns from go-ethereum and reth, plus security analysis capabilities.
 //
 // Usage:
 //
@@ -17,6 +17,12 @@
 //	-rpc         RPC URL for network testing (default: http://localhost:8545)
 //	-mnemonic    BIP39 mnemonic for deriving the test account
 //	-target      Target address for delegation (for network tests)
+//
+// Security Commands:
+//
+//	-security    Run security analysis on an address
+//	-attack      Run attack simulations
+//	-validate    Validate an authorization or contract
 package main
 
 import (
@@ -31,6 +37,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/holiman/uint256"
 	"github.com/stable-net/eip7702-inspector/inspector"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -44,6 +51,11 @@ func main() {
 	rpcURL := flag.String("rpc", "http://localhost:8545", "RPC URL for network testing")
 	mnemonic := flag.String("mnemonic", "", "BIP39 mnemonic for deriving the test account")
 	targetAddr := flag.String("target", "", "Target address for delegation (for network tests)")
+
+	// Security commands
+	security := flag.Bool("security", false, "Run security analysis on target address")
+	attack := flag.Bool("attack", false, "Run attack simulations")
+	validate := flag.Bool("validate", false, "Validate authorization or contract security")
 
 	flag.Parse()
 
@@ -65,6 +77,21 @@ func main() {
 
 	if *quick {
 		runQuickVerification(*verbose)
+		return
+	}
+
+	if *security {
+		runSecurityAnalysis(*rpcURL, *targetAddr)
+		return
+	}
+
+	if *attack {
+		runAttackSimulations(big.NewInt(*chainID), *keyHex, *targetAddr)
+		return
+	}
+
+	if *validate {
+		runValidation(big.NewInt(*chainID), *keyHex, *targetAddr)
 		return
 	}
 
@@ -415,4 +442,141 @@ func printComponentStatus(name string, passed bool, count int) {
 		status = "FAIL"
 	}
 	fmt.Printf("  %-16s [%s] (%d tests)\n", name, status, count)
+}
+
+// runSecurityAnalysis performs security analysis on a target address
+func runSecurityAnalysis(rpcURL, targetAddrHex string) {
+	fmt.Println("Running Security Analysis...")
+	fmt.Println("----------------------------")
+
+	if targetAddrHex == "" {
+		fmt.Fprintf(os.Stderr, "Error: -target address required for security analysis\n")
+		os.Exit(1)
+	}
+
+	targetAddr := common.HexToAddress(targetAddrHex)
+	fmt.Printf("Target Address: %s\n\n", targetAddr.Hex())
+
+	// Create security analyzer
+	analyzer := inspector.NewSecurityAnalyzer()
+
+	// If RPC is provided, try to get code from network
+	var code []byte
+	if rpcURL != "" {
+		tester, err := inspector.NewNetworkTester(rpcURL, inspector.TestPrivateKeys[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Could not connect to RPC: %v\n", err)
+		} else {
+			defer tester.Close()
+			code, err = tester.GetCode(targetAddr)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Could not get code: %v\n", err)
+			}
+		}
+	}
+
+	// Analyze the address
+	result := analyzer.AnalyzeAddress(targetAddr, code)
+
+	// Print the report
+	fmt.Print(inspector.FormatSecurityReport(result))
+
+	// Exit with error if critical issues found
+	if result.HighestRisk == inspector.RiskCritical {
+		os.Exit(1)
+	}
+}
+
+// runAttackSimulations runs attack simulations
+func runAttackSimulations(chainID *big.Int, keyHex, targetAddrHex string) {
+	fmt.Println("Running Attack Simulations...")
+	fmt.Println("-----------------------------")
+
+	var targetAddr common.Address
+	if targetAddrHex != "" {
+		targetAddr = common.HexToAddress(targetAddrHex)
+	} else {
+		targetAddr = common.HexToAddress("0x0000000000000000000000000000000000000042")
+	}
+
+	fmt.Printf("Target Contract: %s\n", targetAddr.Hex())
+	fmt.Printf("Chain ID: %s\n\n", chainID.String())
+
+	// Create attack simulator
+	simulator, err := inspector.NewAttackSimulator(chainID, keyHex)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating attack simulator: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Run all attack simulations
+	results := simulator.RunAllAttackSimulations(targetAddr)
+
+	// Print results
+	fmt.Print(inspector.FormatAllAttackResults(results))
+
+	// Count vulnerabilities
+	vulnCount := 0
+	for _, r := range results {
+		if r.Vulnerable {
+			vulnCount++
+		}
+	}
+
+	if vulnCount > 0 {
+		fmt.Printf("\nWARNING: %d potential vulnerabilities identified!\n", vulnCount)
+		fmt.Println("Review the recommendations above to mitigate these risks.")
+	}
+}
+
+// runValidation runs validation checks
+func runValidation(chainID *big.Int, keyHex, targetAddrHex string) {
+	fmt.Println("Running Validation Checks...")
+	fmt.Println("----------------------------")
+
+	validator := inspector.NewValidator(chainID)
+
+	// Add some trusted contracts for testing
+	validator.AddTrustedContract(common.HexToAddress("0x0000000000000000000000000000000000000042"))
+
+	var targetAddr common.Address
+	if targetAddrHex != "" {
+		targetAddr = common.HexToAddress(targetAddrHex)
+	} else {
+		targetAddr = common.HexToAddress("0x0000000000000000000000000000000000000042")
+	}
+
+	fmt.Printf("Validating authorization for target: %s\n\n", targetAddr.Hex())
+
+	// Create a sample authorization for validation
+	auth := inspector.SetCodeAuthorization{
+		ChainID: *uint256.MustFromBig(chainID),
+		Address: targetAddr,
+		Nonce:   0,
+	}
+
+	// Validate the authorization
+	result := validator.ValidateAuthorization(&auth)
+
+	// Print results
+	fmt.Printf("Authorization Valid: %v\n", result.IsValid)
+	fmt.Printf("Authorization Safe: %v\n", result.IsSafe)
+	fmt.Printf("Should Block: %v\n", result.ShouldBlock)
+	if result.BlockReason != "" {
+		fmt.Printf("Block Reason: %s\n", result.BlockReason)
+	}
+
+	fmt.Print(inspector.FormatValidationResults(result.Findings))
+
+	// Run best practice checks
+	bpc := inspector.NewBestPracticeChecker()
+	bpResults := bpc.CheckAuthorizationBestPractices(&auth)
+
+	fmt.Println("\n--- Best Practice Checks ---")
+	fmt.Print(inspector.FormatValidationResults(bpResults))
+
+	// Exit with error if should block
+	if result.ShouldBlock {
+		os.Exit(1)
+	}
 }

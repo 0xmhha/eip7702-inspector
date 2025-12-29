@@ -104,6 +104,121 @@ Test EIP-7702 transactions on a live network.
 | `-network` | Run network tests against live node | false |
 | `-rpc` | RPC URL for network testing | http://localhost:8545 |
 | `-target` | Target contract address for delegation | 0x42 |
+| `-security` | Run security analysis on target address | false |
+| `-attack` | Run attack simulations | false |
+| `-validate` | Validate authorization or contract security | false |
+
+## Security Analysis
+
+EIP-7702 Inspector includes comprehensive security analysis tools to detect vulnerabilities and validate best practices.
+
+### Security Analysis
+
+Analyze an address for EIP-7702 security risks:
+
+```bash
+# Analyze a specific address
+./eip7702-inspector -security -target 0x1234...
+
+# With RPC connection for on-chain analysis
+./eip7702-inspector -security -target 0x1234... -rpc "https://eth-mainnet.g.alchemy.com/v2/..."
+```
+
+**Output includes:**
+- Delegation status and target
+- Known malicious contract detection
+- Audit status verification
+- Risk score (0-10)
+- Security findings and recommendations
+
+### Attack Simulation
+
+Simulate known EIP-7702 attack vectors:
+
+```bash
+./eip7702-inspector -attack
+```
+
+**Simulated Attack Types:**
+
+| Attack | Description | Risk Level |
+|--------|-------------|------------|
+| **Cross-Chain Replay** | Authorization with chainId=0 replayed across multiple chains | Critical |
+| **Front-Running** | Attacker front-runs wallet initialization | Critical |
+| **Whitelist Bypass** | Delegated address bypasses msg.sender whitelist | High |
+| **Nonce Manipulation** | Re-delegation enables signature replay | High |
+| **Storage Collision** | Different contract storage layouts conflict | High |
+
+**Example Output:**
+```
+=== Cross-Chain Replay Attack Simulation ===
+Type: CROSS_CHAIN_REPLAY
+Impact: Complete loss of assets on ALL EVM chains
+
+Attack Steps:
+  1. [victim] Victim signs authorization with chainId=0
+  2. [attacker] Attacker observes the signed authorization
+  3. [attacker] Attacker replays on Ethereum Mainnet
+  4. [attacker] Attacker replays on Arbitrum
+  ...
+
+Simulation Result: VULNERABLE
+Recommendations:
+  * NEVER sign authorizations with chainId=0
+  * Wallets should block or warn about chainId=0 authorizations
+```
+
+### Authorization Validation
+
+Validate an authorization against security best practices:
+
+```bash
+# Validate with specific chainId (safe)
+./eip7702-inspector -validate -target 0x0000...0042 -chain-id 1
+
+# Validate with chainId=0 (detects vulnerability)
+./eip7702-inspector -validate -target 0x0000...0042 -chain-id 0
+```
+
+**Validation Checks:**
+
+| Check | Category | Description |
+|-------|----------|-------------|
+| **ChainID Zero Check** | Cross-Chain Security | Detects chainId=0 replay risk |
+| **Trusted Contract Check** | Contract Security | Verifies against trusted contract list |
+| **BP001: Use Specific ChainID** | Best Practice | Recommends specific chainId |
+
+**Example Output (Safe):**
+```
+Authorization Valid: true
+Authorization Safe: true
+Should Block: false
+
+[PASS] ChainID Validation - ChainID is properly set
+[PASS] Trusted Contract Check - Target contract is trusted
+[PASS] BP001: Use Specific ChainID - ChainID is properly specified
+```
+
+**Example Output (Vulnerable):**
+```
+Authorization Valid: true
+Authorization Safe: false
+Should Block: true
+Block Reason: Authorization uses chainId=0 which is valid on ALL chains
+
+[FAIL] [CRITICAL] ChainID Zero Check
+       Authorization uses chainId=0 which is valid on ALL chains
+       Suggestion: Use specific chainId for the target network
+```
+
+### Security Documentation
+
+For comprehensive security documentation, see [`docs/SECURITY.md`](docs/SECURITY.md), which covers:
+
+- Detailed vulnerability explanations
+- Attack flow diagrams
+- Mitigation code examples
+- Security checklists for developers, wallets, and users
 
 ### Security Notice
 
@@ -208,6 +323,56 @@ txResult := inspector.VerifySetCodeTx(tx, chainID)
 // Run full inspection
 insp := inspector.NewInspector(chainID, privateKeyHex)
 report, err := insp.RunFullInspection()
+```
+
+### Security Library Usage
+
+```go
+import "github.com/stable-net/eip7702-inspector/inspector"
+
+// Security Analysis
+analyzer := inspector.NewSecurityAnalyzer()
+result := analyzer.AnalyzeAddress(addr, code)
+fmt.Printf("Risk Score: %.1f/10\n", result.RiskScore)
+for _, finding := range result.Findings {
+    fmt.Printf("[%s] %s: %s\n", finding.Risk, finding.Title, finding.Description)
+}
+
+// Authorization Security Check
+check := analyzer.AnalyzeAuthorization(auth, chainID)
+if !check.IsSafe {
+    fmt.Println("Warning:", check.Warnings)
+}
+
+// Attack Simulation
+simulator, _ := inspector.NewAttackSimulator(chainID, privateKeyHex)
+results := simulator.RunAllAttackSimulations(targetContract)
+for _, r := range results {
+    if r.Vulnerable {
+        fmt.Printf("Vulnerable to %s: %s\n", r.Attack.Type, r.Attack.Impact)
+    }
+}
+
+// Validation
+validator := inspector.NewValidator(chainID)
+validator.AddTrustedContract(trustedAddr)
+validator.AddBlockedContract(maliciousAddr, "Known phishing contract")
+
+validationResult := validator.ValidateAuthorization(auth)
+if validationResult.ShouldBlock {
+    fmt.Println("Block:", validationResult.BlockReason)
+}
+
+// Best Practice Checking
+bpc := inspector.NewBestPracticeChecker()
+checks := bpc.CheckAuthorizationBestPractices(auth)
+for _, c := range checks {
+    status := "PASS"
+    if !c.Passed {
+        status = "FAIL"
+    }
+    fmt.Printf("[%s] %s\n", status, c.CheckName)
+}
 ```
 
 ## Smart Contracts
