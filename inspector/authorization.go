@@ -23,13 +23,19 @@ type SetCodeAuthorization struct {
 
 // AuthorizationVerificationResult contains the result of authorization verification
 type AuthorizationVerificationResult struct {
-	Valid             bool
-	Authority         common.Address
-	ErrorMessage      string
-	ChainIDValid      bool
-	SignatureValid    bool
+	Valid              bool
+	Authority          common.Address
+	ErrorMessage       string
+	ChainIDValid       bool
+	SignatureValid     bool
+	SValueValid        bool   // EIP-2: s <= secp256k1n/2
+	YParityValid       bool   // EIP-7702: v must be 0 or 1
+	NonceValid         bool   // EIP-7702: nonce < 2^64 - 1
 	RecoveredAuthority common.Address
-	MatchesExpected   bool
+	MatchesExpected    bool
+	// EIP-7702 delegation revocation
+	IsRevocation       bool           // True if Address == 0x0 (delegation revocation)
+	TargetAddress      common.Address // The target delegation address
 }
 
 // SigHash returns the hash for signing the authorization
@@ -42,11 +48,83 @@ func (a *SetCodeAuthorization) SigHash() common.Hash {
 	})
 }
 
+// IsRevocation returns true if this authorization is a delegation revocation
+// A revocation sets the Address field to the zero address (0x0...0)
+// This clears any existing delegation from the authority's account
+func (a *SetCodeAuthorization) IsRevocation() bool {
+	return a.Address == (common.Address{})
+}
+
+// IsWildcardChain returns true if this authorization uses chainId = 0
+// Wildcard chain authorizations can be replayed on any EVM chain
+func (a *SetCodeAuthorization) IsWildcardChain() bool {
+	return a.ChainID.IsZero()
+}
+
 // prefixedRlpHash computes keccak256(prefix || rlp(data))
 func prefixedRlpHash(prefix byte, data interface{}) common.Hash {
 	encoded, _ := rlp.EncodeToBytes(data)
 	prefixed := append([]byte{prefix}, encoded...)
 	return crypto.Keccak256Hash(prefixed)
+}
+
+// ValidateSignatureS validates that s <= secp256k1n/2 (EIP-2 compliance)
+// This prevents signature malleability attacks
+func ValidateSignatureS(s *uint256.Int) bool {
+	if s == nil {
+		return false
+	}
+	// s must be <= secp256k1n/2
+	return s.Cmp(Secp256k1HalfN) <= 0
+}
+
+// ValidateSignatureSValue checks if the s value is in the lower half of the curve order
+// Returns an error message if invalid, empty string if valid
+func ValidateSignatureSValue(s *uint256.Int) string {
+	if s == nil {
+		return "s value is nil"
+	}
+	if s.IsZero() {
+		return "s value is zero"
+	}
+	if s.Cmp(Secp256k1HalfN) > 0 {
+		return fmt.Sprintf("s value too high: must be <= secp256k1n/2 (EIP-2), got %s", s.Hex())
+	}
+	return ""
+}
+
+// ValidateYParity validates that y_parity (v) is 0 or 1
+// EIP-7702 requires y_parity to be exactly 0 or 1
+func ValidateYParity(v uint8) bool {
+	return v == 0 || v == 1
+}
+
+// ValidateYParityValue checks if the y_parity value is valid
+// Returns an error message if invalid, empty string if valid
+func ValidateYParityValue(v uint8) string {
+	if v != 0 && v != 1 {
+		return fmt.Sprintf("invalid y_parity: must be 0 or 1, got %d", v)
+	}
+	return ""
+}
+
+// MaxNonce is the maximum valid nonce value (2^64 - 2)
+// EIP-7702 requires nonce < 2^64 - 1, so max valid nonce is 2^64 - 2
+const MaxNonce = ^uint64(0) - 1
+
+// ValidateNonce validates that nonce < 2^64 - 1
+// EIP-7702 requires nonce to be strictly less than 2^64 - 1
+func ValidateNonce(nonce uint64) bool {
+	return nonce < ^uint64(0)
+}
+
+// ValidateNonceValue checks if the nonce value is valid
+// Returns an error message if invalid, empty string if valid
+func ValidateNonceValue(nonce uint64) string {
+	if nonce >= ^uint64(0) {
+		return fmt.Sprintf("nonce too high: must be < 2^64-1, got %d", nonce)
+	}
+	return ""
 }
 
 // Authority recovers the signing authority from the authorization
@@ -93,6 +171,10 @@ func VerifyAuthorization(auth *SetCodeAuthorization, expectedChainID *big.Int) *
 func VerifyAuthorizationWithOptions(auth *SetCodeAuthorization, expectedChainID *big.Int, verifySignature bool) *AuthorizationVerificationResult {
 	result := &AuthorizationVerificationResult{}
 
+	// Store target address and detect revocation
+	result.TargetAddress = auth.Address
+	result.IsRevocation = auth.IsRevocation()
+
 	// Verify chain ID if expected one is provided
 	if expectedChainID != nil {
 		authChainID := auth.ChainID.ToBig()
@@ -107,12 +189,39 @@ func VerifyAuthorizationWithOptions(auth *SetCodeAuthorization, expectedChainID 
 		result.ChainIDValid = true
 	}
 
+	// EIP-7702: Validate nonce < 2^64 - 1
+	if errMsg := ValidateNonceValue(auth.Nonce); errMsg != "" {
+		result.ErrorMessage = errMsg
+		result.NonceValid = false
+		return result
+	}
+	result.NonceValid = true
+
 	// Skip signature verification if not required (for structural tests)
 	if !verifySignature || (auth.R.IsZero() && auth.S.IsZero()) {
 		result.SignatureValid = true // Skip signature check for unsigned auths
+		result.SValueValid = true    // Skip s value check for unsigned auths
+		result.YParityValid = true   // Skip y_parity check for unsigned auths
 		result.Valid = true
 		return result
 	}
+
+	// EIP-7702: Validate y_parity (v) is 0 or 1
+	if errMsg := ValidateYParityValue(auth.V); errMsg != "" {
+		result.ErrorMessage = errMsg
+		result.YParityValid = false
+		return result
+	}
+	result.YParityValid = true
+
+	// EIP-2: Validate s value is in lower half of curve order
+	// This prevents signature malleability attacks
+	if errMsg := ValidateSignatureSValue(&auth.S); errMsg != "" {
+		result.ErrorMessage = errMsg
+		result.SValueValid = false
+		return result
+	}
+	result.SValueValid = true
 
 	// Recover authority
 	authority, err := auth.Authority()
