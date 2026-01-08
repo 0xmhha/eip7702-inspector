@@ -5,6 +5,7 @@ go 1.22
 require (
 	github.com/ethereum/go-ethereum v1.14.13
 	github.com/holiman/uint256 v1.3.2
+	github.com/joho/godotenv v1.5.1
 	golang.org/x/crypto v0.22.0
 )
 

@@ -326,7 +326,7 @@ func (as *AttackSimulator) SimulateNonceManipulation(targetContract common.Addre
 
 		result.Evidence[fmt.Sprintf("auth_nonce_%d", nonce)] = map[string]interface{}{
 			"nonce":     nonce,
-			"signature": signedAuth.R.Hex()[:20] + "...",
+			"signature": signedAuth.R.Hex(),
 		}
 	}
 

@@ -495,7 +495,7 @@ func (n *NetworkTester) TestSetCodeTransaction(targetAddr common.Address) (*Netw
 	}
 
 	txHex := "0x" + hex.EncodeToString(txBytes)
-	result.Details["rawTx"] = txHex[:min(100, len(txHex))] + "..."
+	result.Details["rawTx"] = txHex
 
 	// Send transaction
 	txHash, err := n.SendRawTransaction(txHex)
@@ -555,7 +555,7 @@ func (n *NetworkTester) TestDelegationCode(addr common.Address, expectedTarget c
 }
 
 // TestBatchExecution tests executing a batch transaction via EIP-7702 delegation
-func (n *NetworkTester) TestBatchExecution() (*NetworkTestResult, error) {
+func (n *NetworkTester) TestBatchExecution(targetAddr common.Address) (*NetworkTestResult, error) {
 	result := &NetworkTestResult{
 		Name:        "Batch Execution Test",
 		Description: "Execute multiple calls via BatchExecutor delegation",
@@ -589,11 +589,22 @@ func (n *NetworkTester) TestBatchExecution() (*NetworkTestResult, error) {
 	}
 
 	// Prepare batch execution:
-	// - Send 0.0001 ETH to two different addresses
-	target1 := common.HexToAddress("0x000000000000000000000000000000000000dEaD") // burn address
-	target2 := common.HexToAddress("0x0000000000000000000000000000000000000001") // precompile (ecrecover)
+	// - Send 1 ETH to target addresses
+	// - If no target configured, generate deterministic test addresses from hash
+	var target1, target2 common.Address
+	if targetAddr != (common.Address{}) {
+		// Use configured target address for both transfers
+		target1 = targetAddr
+		target2 = targetAddr
+	} else {
+		// Generate deterministic addresses from hash (last 20 bytes)
+		hash1 := crypto.Keccak256([]byte("eip7702-test-target-1"))
+		hash2 := crypto.Keccak256([]byte("eip7702-test-target-2"))
+		target1 = common.BytesToAddress(hash1[12:]) // Use last 20 bytes
+		target2 = common.BytesToAddress(hash2[12:])
+	}
 
-	amount := big.NewInt(100000000000000) // 0.0001 ETH = 10^14 wei
+	amount := big.NewInt(1000000000000000000) // 1 ETH = 10^18 wei
 
 	// Encode executeBatch(address[], uint256[], bytes[])
 	// Function selector: keccak256("executeBatch(address[],uint256[],bytes[])") = 0x47e1da2a
@@ -840,7 +851,7 @@ func (n *NetworkTester) RunNetworkTests(targetAddr common.Address) ([]*NetworkTe
 			time.Sleep(15 * time.Second)
 
 			// Test batch execution via delegation
-			batchResult, err := n.TestBatchExecution()
+			batchResult, err := n.TestBatchExecution(targetAddr)
 			if err != nil {
 				return nil, err
 			}

@@ -16,7 +16,12 @@ contract Deploy is Script {
     address constant ENTRYPOINT_V06 = 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envOr("PRIVATE_KEY", uint256(0));
+        if (deployerPrivateKey == 0) {
+            // Try parsing as hex string without 0x prefix
+            string memory keyStr = vm.envString("PRIVATE_KEY");
+            deployerPrivateKey = vm.parseUint(string.concat("0x", keyStr));
+        }
 
         vm.startBroadcast(deployerPrivateKey);
 
@@ -59,7 +64,11 @@ contract Deploy is Script {
 /// @notice Deploy only BatchExecutor
 contract DeployBatchExecutor is Script {
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envOr("PRIVATE_KEY", uint256(0));
+        if (deployerPrivateKey == 0) {
+            string memory keyStr = vm.envString("PRIVATE_KEY");
+            deployerPrivateKey = vm.parseUint(string.concat("0x", keyStr));
+        }
 
         vm.startBroadcast(deployerPrivateKey);
 
@@ -76,7 +85,11 @@ contract DeploySimpleAccount is Script {
     address constant ENTRYPOINT_V06 = 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envOr("PRIVATE_KEY", uint256(0));
+        if (deployerPrivateKey == 0) {
+            string memory keyStr = vm.envString("PRIVATE_KEY");
+            deployerPrivateKey = vm.parseUint(string.concat("0x", keyStr));
+        }
 
         vm.startBroadcast(deployerPrivateKey);
 

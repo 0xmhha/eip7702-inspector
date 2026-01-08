@@ -13,10 +13,200 @@ EIP-7702 introduces a new transaction type (0x04) that allows Externally Owned A
 
 ## Installation
 
+### Quick Start with Make
+
 ```bash
 cd eip7702-inspector
+
+# Download dependencies
+make deps
+
+# Build the binary (output: build/eip7702-inspector)
+make build
+
+# Install globally (optional, requires sudo)
+make install
+
+# Or install to ~/bin (no sudo required)
+make install-user
+```
+
+### Manual Build
+
+```bash
 go mod tidy
-go build
+go build -o build/eip7702-inspector .
+```
+
+## Quick Start: EIP-7702 Testing Workflow
+
+This section describes the complete workflow for testing EIP-7702 delegation using the Makefile commands.
+
+### Step 1: Environment Setup
+
+Create and configure your `.env` file:
+
+```bash
+# Create .env from template
+make env-setup
+
+# Edit .env with your configuration
+vim .env
+```
+
+**Required `.env` Configuration:**
+
+```bash
+# Chain configuration
+CHAIN_ID=8283                    # Your chain ID
+RPC_URL=http://localhost:8501    # Your RPC endpoint
+
+# Test account (WARNING: Use only test accounts!)
+PRIVATE_KEY=your_private_key_without_0x_prefix
+
+# Optional: Target contract for delegation
+TARGET_ADDRESS=0x...
+```
+
+**View current configuration:**
+
+```bash
+make env-show
+```
+
+### Step 2: Deploy Contracts (Optional)
+
+If you need to deploy your own contracts:
+
+```bash
+# Deploy all EIP-7702 contracts
+make deploy
+
+# Or deploy specific contracts
+make deploy-batch-executor
+make deploy-simple-account
+
+# Dry run (simulate without broadcasting)
+make deploy-dry-run
+```
+
+### Step 3: Send SetCode Transaction (EIP-7702 Delegation)
+
+After deploying contracts, establish delegation by sending a SetCode transaction:
+
+```bash
+# Send SetCode transaction to delegate EOA to contract
+make delegate ADDR=0x<deployed-contract-address>
+
+# Or use TARGET_ADDRESS from .env
+make set-target ADDR=0x<deployed-contract-address>
+make delegate-target
+
+# To revoke delegation (set code to 0x0)
+make revoke-delegation
+```
+
+**Important:** The `make delegate` command sends an actual EIP-7702 SetCode transaction (type 0x04) to the network. This establishes the delegation on-chain.
+
+### Step 4: Test EIP-7702 Functionality
+
+Run tests against the delegated EOA:
+
+```bash
+# Test with TARGET_ADDRESS from .env
+make test-eip7702
+
+# Or specify address directly
+make test-delegation ADDR=0x<contract-address>
+
+# Run full network tests
+make network
+```
+
+### Complete Workflow Example
+
+```bash
+# 1. Setup environment
+make env-setup
+# Edit .env with PRIVATE_KEY, RPC_URL, CHAIN_ID
+
+# 2. Build the inspector
+make build
+
+# 3. Deploy contracts
+make deploy
+# Note the deployed BatchExecutor address: 0x95dEB77C03A7D371A70125b181cd82A5B92c8149
+
+# 4. Send SetCode transaction to delegate EOA
+make delegate ADDR=0x95dEB77C03A7D371A70125b181cd82A5B92c8149
+
+# 5. Run EIP-7702 tests
+make test-delegation ADDR=0x95dEB77C03A7D371A70125b181cd82A5B92c8149
+```
+
+### Available Make Commands
+
+**Build Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build binary to `build/` directory |
+| `make clean` | Remove build artifacts |
+| `make install` | Install to `/usr/local/bin` (requires sudo) |
+| `make install-user` | Install to `~/bin` (no sudo) |
+
+**Delegation Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `make delegate ADDR=0x...` | Send SetCode tx to delegate EOA to address |
+| `make delegate-target` | Send SetCode tx using TARGET_ADDRESS from .env |
+| `make revoke-delegation` | Revoke delegation (set code to 0x0) |
+| `make set-target ADDR=0x...` | Save target address to .env (no tx) |
+
+**Test Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `make test-eip7702` | Run EIP-7702 test with TARGET_ADDRESS |
+| `make test-delegation ADDR=0x...` | Run delegation test with specific address |
+| `make network` | Run full network tests |
+| `make quick` | Run quick offline verification |
+| `make verbose` | Run full inspection with verbose output |
+
+**Contract Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `make deploy` | Deploy all contracts |
+| `make deploy-batch-executor` | Deploy BatchExecutor only |
+| `make deploy-dry-run` | Simulate deployment |
+| `make contracts-build` | Build Solidity contracts |
+| `make contracts-test` | Run contract tests |
+
+**Utility Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `make env-setup` | Create .env from template |
+| `make env-show` | Show current .env configuration |
+| `make workflow` | Show complete workflow guide |
+| `make presets` | List available chain presets |
+| `make help` | Show all available commands |
+
+### Chain Presets
+
+Use presets for quick configuration:
+
+```bash
+# List available presets
+make presets
+
+# Run with specific preset
+make local      # Local Anvil/Hardhat (chainId: 31337)
+make sepolia    # Sepolia testnet (chainId: 11155111)
+make holesky    # Holesky testnet (chainId: 17000)
+make mainnet    # Ethereum mainnet (chainId: 1)
 ```
 
 ## Deployed Contracts (Sepolia Testnet)
@@ -96,17 +286,21 @@ Test EIP-7702 transactions on a live network.
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `-chain-id` | Chain ID for testing | 1 |
-| `-key` | Private key hex for signing | (test key) |
+| `-chain-id` | Chain ID for testing | 1 (or from .env) |
+| `-key` | Private key hex for signing | (from .env or test key) |
 | `-mnemonic` | BIP39 mnemonic for key derivation | - |
 | `-quick` | Run quick verification only | false |
 | `-verbose` | Show detailed output | false |
 | `-network` | Run network tests against live node | false |
-| `-rpc` | RPC URL for network testing | http://localhost:8545 |
-| `-target` | Target contract address for delegation | 0x42 |
+| `-rpc` | RPC URL for network testing | http://localhost:8545 (or from .env) |
+| `-target` | Target contract address for delegation | (from .env) |
+| `-delegate` | Send SetCode transaction to delegate EOA | false |
 | `-security` | Run security analysis on target address | false |
 | `-attack` | Run attack simulations | false |
 | `-validate` | Validate authorization or contract security | false |
+| `-preset` | Chain preset (local, sepolia, holesky, mainnet) | - |
+| `-list-presets` | List available chain presets | false |
+| `-env` | Path to .env file | .env |
 
 ## Security Analysis
 
@@ -472,9 +666,11 @@ Calls `executeBatch()` from the delegated EOA to send ETH to multiple addresses.
 
 1. **EOA** (`0x309F618825AfaCFCb532ba47420106F766B84048`) sets **BatchExecutor** contract (`0xA6E8CF0671563914489F2eC2436CeBCcD17B7A85`) as delegation
 2. EIP-1559 transaction calls self (EOA) with `executeBatch()` function
-3. Sends 0.0001 ETH each to 2 addresses:
-   - `0x000000000000000000000000000000000000dEaD` (burn address)
-   - `0x0000000000000000000000000000000000000001` (ecrecover precompile)
+3. Sends 1 ETH each to target addresses (configured via `-target` flag or `.env`)
+
+**Target Address Configuration:**
+- If `TARGET_ADDRESS` is set: Sends to the configured address
+- If not set: Generates deterministic test addresses from hash
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -493,15 +689,15 @@ Calls `executeBatch()` from the delegated EOA to send ETH to multiple addresses.
 │  Step 2: Batch Execution (type 0x02)                                  │
 │  ┌─────────────────┐                                                  │
 │  │       EOA       │──call self──> executeBatch(                      │
-│  │   (delegated)   │                [0xdead, 0x0001],                 │
-│  └─────────────────┘                [0.0001 ETH, 0.0001 ETH],         │
+│  │   (delegated)   │                [target, target],                 │
+│  └─────────────────┘                [1 ETH, 1 ETH],                   │
 │         │                           [[], []]                          │
 │         │                          )                                  │
 │         ▼                                                             │
-│  ┌──────────┬──────────┐                                              │
-│  │  0xdEaD  │  0x0001  │                                              │
-│  │ +0.0001  │ +0.0001  │                                              │
-│  └──────────┴──────────┘                                              │
+│  ┌─────────────────────────────┐                                      │
+│  │       Target Address        │                                      │
+│  │         +2 ETH              │                                      │
+│  └─────────────────────────────┘                                      │
 │                                                                       │
 └──────────────────────────────────────────────────────────────────────┘
 ```

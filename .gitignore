@@ -1,6 +1,7 @@
 # Compiled binary
 eip7702-inspector
 eip7702-inspector.exe
+build/
 
 # Go build artifacts
 *.exe

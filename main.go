@@ -9,20 +9,32 @@
 //
 // Options:
 //
-//	-chain-id    Chain ID to use for testing (default: 1)
-//	-key         Private key hex for signing tests (uses test key if not provided)
-//	-quick       Run quick verification only
-//	-verbose     Show detailed output
-//	-network     Run network tests against a live Ethereum node
-//	-rpc         RPC URL for network testing (default: http://localhost:8545)
-//	-mnemonic    BIP39 mnemonic for deriving the test account
-//	-target      Target address for delegation (for network tests)
+//	-chain-id      Chain ID to use for testing (default: 1, or from env/preset)
+//	-key           Private key hex for signing tests (uses test key if not provided)
+//	-quick         Run quick verification only
+//	-verbose       Show detailed output
+//	-network       Run network tests against a live Ethereum node
+//	-rpc           RPC URL for network testing (default: http://localhost:8545)
+//	-mnemonic      BIP39 mnemonic for deriving the test account
+//	-target        Target address for delegation (for network tests)
+//	-preset        Chain preset (local, mainnet, sepolia, holesky, goerli)
+//	-env           Path to .env file (default: .env in current directory)
+//	-list-presets  List available chain presets
 //
 // Security Commands:
 //
 //	-security    Run security analysis on an address
 //	-attack      Run attack simulations
 //	-validate    Validate an authorization or contract
+//	-delegate    Send SetCode transaction to delegate EOA to target address
+//
+// Environment Variables:
+//
+//	CHAIN_ID        Chain ID (overrides default, overridden by -chain-id flag)
+//	RPC_URL         RPC endpoint URL (overrides default, overridden by -rpc flag)
+//	PRIVATE_KEY     Test account private key (no 0x prefix)
+//	TARGET_ADDRESS  Delegation target contract address
+//	CHAIN_PRESET    Chain preset name (e.g., sepolia)
 package main
 
 import (
@@ -38,26 +50,77 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/holiman/uint256"
+	"github.com/stable-net/eip7702-inspector/config"
 	"github.com/stable-net/eip7702-inspector/inspector"
 	"golang.org/x/crypto/pbkdf2"
 )
 
 func main() {
-	chainID := flag.Int64("chain-id", 1, "Chain ID for testing")
-	keyHex := flag.String("key", "", "Private key hex for signing tests")
+	// Pre-parse to get env path for early loading
+	// We need to load .env before defining other flags so defaults work
+	envLoaded := false
+	for i, arg := range os.Args[1:] {
+		if arg == "-env" && i+1 < len(os.Args)-1 {
+			_ = config.LoadConfig(os.Args[i+2])
+			envLoaded = true
+			break
+		} else if strings.HasPrefix(arg, "-env=") {
+			_ = config.LoadConfig(strings.TrimPrefix(arg, "-env="))
+			envLoaded = true
+			break
+		}
+	}
+	// Try default .env if not explicitly specified
+	if !envLoaded {
+		_ = config.LoadConfig("")
+	}
+
+	// Define flags
+	_ = flag.String("env", "", "Path to .env file (default: .env in current directory)")
+	preset := flag.String("preset", "", "Chain preset (local, mainnet, sepolia, holesky, goerli)")
+	listPresets := flag.Bool("list-presets", false, "List available chain presets")
+
+	// Define flags with environment-aware defaults
+	chainID := flag.Int64("chain-id", config.GetChainID().Int64(), "Chain ID for testing")
+	keyHex := flag.String("key", config.GetPrivateKey(), "Private key hex for signing tests")
 	quick := flag.Bool("quick", false, "Run quick verification only")
 	verbose := flag.Bool("verbose", false, "Show detailed output")
 	network := flag.Bool("network", false, "Run network tests against a live Ethereum node")
-	rpcURL := flag.String("rpc", "http://localhost:8545", "RPC URL for network testing")
+	rpcURL := flag.String("rpc", config.GetRPCURL(), "RPC URL for network testing")
 	mnemonic := flag.String("mnemonic", "", "BIP39 mnemonic for deriving the test account")
-	targetAddr := flag.String("target", "", "Target address for delegation (for network tests)")
+	targetAddr := flag.String("target", config.GetTargetAddress(), "Target address for delegation (for network tests)")
 
 	// Security commands
 	security := flag.Bool("security", false, "Run security analysis on target address")
 	attack := flag.Bool("attack", false, "Run attack simulations")
 	validate := flag.Bool("validate", false, "Validate authorization or contract security")
 
+	// Delegation command
+	delegate := flag.Bool("delegate", false, "Send SetCode transaction to delegate EOA to target address")
+
 	flag.Parse()
+
+	// Handle list-presets command
+	if *listPresets {
+		config.PrintPresets()
+		return
+	}
+
+	// Apply preset if specified (preset values are overridden by explicit flags)
+	if *preset != "" {
+		presetConfig, err := config.ApplyPreset(*preset)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		// Only apply preset values if not explicitly set via flags
+		if !isFlagSet("chain-id") {
+			*chainID = presetConfig.ChainID.Int64()
+		}
+		if !isFlagSet("rpc") {
+			*rpcURL = presetConfig.RPCURL
+		}
+	}
 
 	fmt.Println("EIP-7702 Inspector")
 	fmt.Println("==================")
@@ -95,12 +158,28 @@ func main() {
 		return
 	}
 
+	if *delegate {
+		runDelegation(*rpcURL, *keyHex, *targetAddr)
+		return
+	}
+
 	if *network {
 		runNetworkTests(*rpcURL, *keyHex, *targetAddr)
 		return
 	}
 
 	runFullInspection(big.NewInt(*chainID), *keyHex, *verbose)
+}
+
+// isFlagSet checks if a flag was explicitly set on the command line
+func isFlagSet(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
 
 // deriveKeyFromMnemonic derives a private key from a BIP39 mnemonic using BIP44 path
@@ -579,4 +658,64 @@ func runValidation(chainID *big.Int, keyHex, targetAddrHex string) {
 	if result.ShouldBlock {
 		os.Exit(1)
 	}
+}
+
+// runDelegation sends a SetCode transaction to delegate the EOA to the target address
+func runDelegation(rpcURL, keyHex, targetAddrHex string) {
+	fmt.Println("Sending SetCode Transaction for Delegation...")
+	fmt.Println("---------------------------------------------")
+
+	if targetAddrHex == "" {
+		fmt.Fprintf(os.Stderr, "Error: -target address required for delegation\n")
+		os.Exit(1)
+	}
+
+	targetAddr := common.HexToAddress(targetAddrHex)
+	fmt.Printf("Target Contract: %s\n", targetAddr.Hex())
+	fmt.Printf("RPC URL: %s\n", rpcURL)
+
+	// Create network tester
+	tester, err := inspector.NewNetworkTester(rpcURL, keyHex)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating network tester: %v\n", err)
+		os.Exit(1)
+	}
+	defer tester.Close()
+
+	fmt.Printf("Account Address: %s\n", tester.GetAddress().Hex())
+	fmt.Printf("Chain ID: %s\n", tester.GetChainID().String())
+
+	// Get balance
+	balance, err := tester.GetBalance()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting balance: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Balance: %s wei\n\n", balance.String())
+
+	// Send SetCode transaction
+	result, err := tester.TestSetCodeTransaction(targetAddr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error sending SetCode transaction: %v\n", err)
+		os.Exit(1)
+	}
+
+	if result.Error != nil {
+		fmt.Fprintf(os.Stderr, "SetCode transaction failed: %v\n", result.Error)
+		if details, ok := result.Details["errorMessage"]; ok {
+			fmt.Fprintf(os.Stderr, "Error details: %v\n", details)
+		}
+		os.Exit(1)
+	}
+
+	fmt.Println("=== SetCode Transaction Result ===")
+	fmt.Printf("Status: %s\n", result.Details["status"])
+	fmt.Printf("TX Hash: %s\n", result.TxHash)
+	fmt.Printf("Authority: %s\n", result.Details["authority"])
+	fmt.Printf("Target Address: %s\n", result.Details["targetAddress"])
+	fmt.Printf("TX Nonce: %v\n", result.Details["txNonce"])
+	fmt.Printf("Auth Nonce: %v\n", result.Details["authNonce"])
+	fmt.Println()
+	fmt.Println("SetCode transaction submitted successfully!")
+	fmt.Println("Note: Wait for transaction confirmation before using the delegated account.")
 }
