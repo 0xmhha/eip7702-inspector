@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "forge-std/Test.sol";
-import "../src/MultisigLogic.sol";
+import {Test} from "forge-std/Test.sol";
+import {MultisigLogic} from "../src/MultisigLogic.sol";
 
 /// @title MockTarget
 /// @notice A mock contract for testing

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./interfaces/IEIP7702Account.sol";
+import {IEIP7702Account} from "./interfaces/IEIP7702Account.sol";
 
 /// @title BatchExecutor
 /// @notice Execute multiple calls in a single transaction via EIP-7702 delegation
@@ -26,8 +26,13 @@ contract BatchExecutor is IEIP7702Account {
     /// @notice Ensures only the delegating EOA can call this function
     /// @dev In EIP-7702, when EOA delegates to this contract, msg.sender == address(this)
     modifier onlyDelegator() {
-        if (msg.sender != address(this)) revert OnlyDelegator();
+        _checkDelegator();
         _;
+    }
+
+    /// @notice Internal function to check delegator
+    function _checkDelegator() internal view {
+        if (msg.sender != address(this)) revert OnlyDelegator();
     }
 
     /// @notice Execute a single call

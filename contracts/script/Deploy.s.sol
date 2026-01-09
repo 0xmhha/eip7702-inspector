@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "forge-std/Script.sol";
-import "../src/BatchExecutor.sol";
-import "../src/SimpleAccount.sol";
-import "../src/MultisigLogic.sol";
-import "../src/SessionKeyManager.sol";
-import "../src/PaymasterHelper.sol";
-import "../src/interfaces/IEntryPoint.sol";
+import {Script, console} from "forge-std/Script.sol";
+import {BatchExecutor} from "../src/BatchExecutor.sol";
+import {SimpleAccount} from "../src/SimpleAccount.sol";
+import {MultisigLogic} from "../src/MultisigLogic.sol";
+import {SessionKeyManager} from "../src/SessionKeyManager.sol";
+import {PaymasterHelper} from "../src/PaymasterHelper.sol";
+import {IEntryPoint} from "../src/interfaces/IEntryPoint.sol";
 
 /// @title Deploy
 /// @notice Deployment script for EIP-7702 contracts

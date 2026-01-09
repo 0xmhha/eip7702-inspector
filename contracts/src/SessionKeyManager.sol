@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./interfaces/IEIP7702Account.sol";
+import {IEIP7702Account} from "./interfaces/IEIP7702Account.sol";
 
 /// @title SessionKeyManager
 /// @notice Manage session keys with limited permissions for EIP-7702 delegated accounts

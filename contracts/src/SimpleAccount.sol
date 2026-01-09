@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./interfaces/IEIP7702Account.sol";
-import "./interfaces/IEntryPoint.sol";
+import {IEIP7702Account} from "./interfaces/IEIP7702Account.sol";
+import {IEntryPoint, UserOperation, IAccount} from "./interfaces/IEntryPoint.sol";
 
 /// @title SimpleAccount
 /// @notice ERC-4337 compatible smart account for EIP-7702 delegation
@@ -10,7 +10,7 @@ import "./interfaces/IEntryPoint.sol";
 /// @custom:eip-delegation This contract is designed for EIP-7702 code delegation
 contract SimpleAccount is IEIP7702Account, IAccount {
     /// @notice The ERC-4337 EntryPoint address
-    IEntryPoint public immutable entryPoint;
+    IEntryPoint public immutable ENTRY_POINT;
 
     /// @notice Emitted when a call is executed
     event Executed(address indexed target, uint256 value, bytes data);
@@ -36,17 +36,22 @@ contract SimpleAccount is IEIP7702Account, IAccount {
     /// @notice Signature validation failed
     uint256 internal constant SIG_VALIDATION_FAILED = 1;
 
-    /// @param _entryPoint The ERC-4337 EntryPoint address
-    constructor(IEntryPoint _entryPoint) {
-        entryPoint = _entryPoint;
+    /// @param entryPoint_ The ERC-4337 EntryPoint address
+    constructor(IEntryPoint entryPoint_) {
+        ENTRY_POINT = entryPoint_;
     }
 
     /// @notice Modifier to restrict access to EntryPoint or self
     modifier onlyEntryPointOrSelf() {
-        if (msg.sender != address(entryPoint) && msg.sender != address(this)) {
+        _checkEntryPointOrSelf();
+        _;
+    }
+
+    /// @notice Internal function to check EntryPoint or self
+    function _checkEntryPointOrSelf() internal view {
+        if (msg.sender != address(ENTRY_POINT) && msg.sender != address(this)) {
             revert Unauthorized();
         }
-        _;
     }
 
     /// @notice Validate a UserOperation
@@ -59,7 +64,7 @@ contract SimpleAccount is IEIP7702Account, IAccount {
         bytes32 userOpHash,
         uint256 missingAccountFunds
     ) external override returns (uint256 validationData) {
-        if (msg.sender != address(entryPoint)) revert Unauthorized();
+        if (msg.sender != address(ENTRY_POINT)) revert Unauthorized();
 
         // Validate signature
         validationData = _validateSignature(userOp, userOpHash);
@@ -165,24 +170,24 @@ contract SimpleAccount is IEIP7702Account, IAccount {
     /// @param signer The address to check
     /// @return True if authorized (is self or EntryPoint)
     function isAuthorized(address signer) external view override returns (bool) {
-        return signer == address(this) || signer == address(entryPoint);
+        return signer == address(this) || signer == address(ENTRY_POINT);
     }
 
     /// @notice Get the nonce for this account
     /// @return The current nonce from EntryPoint
     function getNonce() public view returns (uint256) {
-        return entryPoint.getNonce(address(this), 0);
+        return ENTRY_POINT.getNonce(address(this), 0);
     }
 
     /// @notice Deposit to EntryPoint for gas
     function addDeposit() public payable {
-        entryPoint.depositTo{value: msg.value}(address(this));
+        ENTRY_POINT.depositTo{value: msg.value}(address(this));
     }
 
     /// @notice Get deposit balance at EntryPoint
     /// @return The deposit balance
     function getDeposit() public view returns (uint256) {
-        return entryPoint.balanceOf(address(this));
+        return ENTRY_POINT.balanceOf(address(this));
     }
 
     /// @notice Allow receiving ETH

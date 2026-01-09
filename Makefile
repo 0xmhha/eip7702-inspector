@@ -286,6 +286,126 @@ deploy-local: contracts-build ## Deploy to local Anvil node (localhost:8545)
 		--slow \
 		-vvv
 
+##@ SetCode Validation Tests
+
+.PHONY: contracts-test-setcode
+contracts-test-setcode: ## Run SetCode validation Foundry tests
+	cd contracts && forge test --match-contract SetCodeValidation -vv
+
+.PHONY: deploy-test-target
+deploy-test-target: contracts-build ## Deploy SetCodeTestTarget contract for CA validation
+	@if [ -z "$(RPC_URL)" ]; then \
+		echo "Error: RPC_URL not set. Set it in .env or pass RPC_URL=<url>"; \
+		exit 1; \
+	fi
+	@echo "Deploying SetCodeTestTarget to: $(RPC_URL)"
+	cd contracts && forge create src/SetCodeTestTarget.sol:SetCodeTestTarget \
+		--rpc-url $(RPC_URL) \
+		--broadcast
+
+.PHONY: test-ca-authority
+test-ca-authority: build ## Test that CA cannot be SetCode authority (usage: make test-ca-authority ADDR=0x<contract>)
+	@if [ -z "$(ADDR)" ]; then \
+		echo "Usage: make test-ca-authority ADDR=0x<contract-address>"; \
+		echo ""; \
+		echo "This tests that a Contract Account (CA) cannot be used as SetCode authority."; \
+		echo "Expected result: SetCode authorization should fail with ErrAuthorizationDestinationHasCode"; \
+		exit 1; \
+	fi
+	@echo "Testing CA cannot be SetCode authority: $(ADDR)"
+	./$(BUILD_DIR)/$(BINARY_NAME) -network -target $(ADDR) -verbose
+
+.PHONY: test-setcode-to-contract
+test-setcode-to-contract: build ## Test SetCode delegation to contract target (usage: make test-setcode-to-contract ADDR=0x<contract>)
+	@if [ -z "$(ADDR)" ]; then \
+		echo "Usage: make test-setcode-to-contract ADDR=0x<contract-address>"; \
+		echo ""; \
+		echo "This tests delegating an EOA to a contract address."; \
+		echo "Expected result: SetCode should succeed (spec allows delegation to contract targets)"; \
+		exit 1; \
+	fi
+	@echo "Testing SetCode delegation to contract: $(ADDR)"
+	./$(BUILD_DIR)/$(BINARY_NAME) -delegate -target $(ADDR)
+
+.PHONY: ca-validation-workflow
+ca-validation-workflow: ## Show CA validation testing workflow
+	@echo ""
+	@echo "=== Contract Account (CA) SetCode Validation Workflow ==="
+	@echo ""
+	@echo "This workflow tests EIP-7702 validation rules:"
+	@echo "  - CA (Contract Account) CANNOT be SetCode authority"
+	@echo "  - EOA CAN delegate to contract target"
+	@echo ""
+	@echo "1. Run Foundry unit tests:"
+	@echo "   make contracts-test-setcode"
+	@echo ""
+	@echo "2. Generate genesis.json entry for CA test:"
+	@echo "   make genesis-ca-entry"
+	@echo "   # Copy the output to your genesis.json alloc section"
+	@echo ""
+	@echo "3. Start node with modified genesis, then test:"
+	@echo "   make test-ca-setcode-rejection"
+	@echo "   # Should fail with: ErrAuthorizationDestinationHasCode"
+	@echo ""
+	@echo "=== Quick Test ==="
+	@echo "  make contracts-test-setcode    # Run all SetCode validation tests"
+	@echo "  make genesis-ca-entry          # Generate genesis.json entry"
+	@echo ""
+
+.PHONY: genesis-ca-entry
+genesis-ca-entry: contracts-build ## Generate genesis.json entry for CA SetCode test
+	@echo ""
+	@echo "=== Genesis.json Entry for CA SetCode Test ==="
+	@echo ""
+	@echo "Add this to your genesis.json 'alloc' section to test CA cannot be SetCode authority."
+	@echo ""
+	@echo "Test Account (DO NOT USE IN PRODUCTION):"
+	@echo "  Private Key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+	@echo "  Address:     0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+	@echo ""
+	@echo "Genesis.json entry:"
+	@echo "----------------------------------------"
+	@echo '"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266": {'
+	@echo '  "balance": "10000000000000000000000",'
+	@printf '  "code": "'
+	@cd contracts && cat out/SetCodeTestTarget.sol/SetCodeTestTarget.json | jq -r '.deployedBytecode.object'
+	@echo '"'
+	@echo '}'
+	@echo "----------------------------------------"
+	@echo ""
+	@echo "After adding to genesis.json:"
+	@echo "  1. Restart your node with the new genesis"
+	@echo "  2. Set CA_TEST_KEY in .env:"
+	@echo "     CA_TEST_KEY=ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+	@echo "  3. Run: make test-ca-setcode-rejection"
+	@echo ""
+
+.PHONY: genesis-ca-json
+genesis-ca-json: contracts-build ## Output genesis.json entry as valid JSON (for scripting)
+	@echo '{'
+	@echo '  "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266": {'
+	@echo '    "balance": "10000000000000000000000",'
+	@printf '    "code": "%s"\n' "$$(cd contracts && cat out/SetCodeTestTarget.sol/SetCodeTestTarget.json | jq -r '.deployedBytecode.object')"
+	@echo '  }'
+	@echo '}'
+
+.PHONY: test-ca-setcode-rejection
+test-ca-setcode-rejection: build ## Test that CA with code cannot be SetCode authority
+	@if [ -z "$(CA_TEST_KEY)" ]; then \
+		echo "Error: CA_TEST_KEY not set."; \
+		echo ""; \
+		echo "This test requires a genesis.json with pre-loaded contract code."; \
+		echo "Run 'make genesis-ca-entry' for setup instructions."; \
+		echo ""; \
+		echo "Set CA_TEST_KEY in .env or pass it directly:"; \
+		echo "  make test-ca-setcode-rejection CA_TEST_KEY=<private-key>"; \
+		exit 1; \
+	fi
+	@echo "Testing CA cannot be SetCode authority..."
+	@echo "Expected result: Transaction should be REJECTED with ErrAuthorizationDestinationHasCode"
+	@echo ""
+	CA_TEST_KEY=$(CA_TEST_KEY) ./$(BUILD_DIR)/$(BINARY_NAME) -test-ca-authority
+
 ##@ EIP-7702 Test Workflow
 
 .PHONY: test-eip7702

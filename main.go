@@ -47,6 +47,7 @@ import (
 	"math/big"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/holiman/uint256"
@@ -97,6 +98,9 @@ func main() {
 
 	// Delegation command
 	delegate := flag.Bool("delegate", false, "Send SetCode transaction to delegate EOA to target address")
+
+	// CA Authority test command
+	testCAAuthority := flag.Bool("test-ca-authority", false, "Test that Contract Account cannot be SetCode authority")
 
 	flag.Parse()
 
@@ -160,6 +164,11 @@ func main() {
 
 	if *delegate {
 		runDelegation(*rpcURL, *keyHex, *targetAddr)
+		return
+	}
+
+	if *testCAAuthority {
+		runCAAuthorityTest(*rpcURL)
 		return
 	}
 
@@ -682,7 +691,8 @@ func runDelegation(rpcURL, keyHex, targetAddrHex string) {
 	}
 	defer tester.Close()
 
-	fmt.Printf("Account Address: %s\n", tester.GetAddress().Hex())
+	accountAddr := tester.GetAddress()
+	fmt.Printf("Account Address: %s\n", accountAddr.Hex())
 	fmt.Printf("Chain ID: %s\n", tester.GetChainID().String())
 
 	// Get balance
@@ -691,7 +701,16 @@ func runDelegation(rpcURL, keyHex, targetAddrHex string) {
 		fmt.Fprintf(os.Stderr, "Error getting balance: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Balance: %s wei\n\n", balance.String())
+	fmt.Printf("Balance: %s wei\n", balance.String())
+
+	// Get current nonce
+	nonce, err := tester.GetNonce()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting nonce: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Current Nonce: %d\n", nonce)
+	fmt.Println()
 
 	// Send SetCode transaction
 	result, err := tester.TestSetCodeTransaction(targetAddr)
@@ -701,21 +720,193 @@ func runDelegation(rpcURL, keyHex, targetAddrHex string) {
 	}
 
 	if result.Error != nil {
-		fmt.Fprintf(os.Stderr, "SetCode transaction failed: %v\n", result.Error)
+		fmt.Fprintf(os.Stderr, "\n=== SetCode Transaction FAILED ===\n")
+		fmt.Fprintf(os.Stderr, "Error: %v\n", result.Error)
 		if details, ok := result.Details["errorMessage"]; ok {
-			fmt.Fprintf(os.Stderr, "Error details: %v\n", details)
+			fmt.Fprintf(os.Stderr, "Error Message: %v\n", details)
+		}
+		if details, ok := result.Details["errorType"]; ok {
+			fmt.Fprintf(os.Stderr, "Error Type: %v\n", details)
 		}
 		os.Exit(1)
 	}
 
-	fmt.Println("=== SetCode Transaction Result ===")
-	fmt.Printf("Status: %s\n", result.Details["status"])
+	fmt.Println("=== SetCode Transaction Submitted ===")
 	fmt.Printf("TX Hash: %s\n", result.TxHash)
 	fmt.Printf("Authority: %s\n", result.Details["authority"])
 	fmt.Printf("Target Address: %s\n", result.Details["targetAddress"])
 	fmt.Printf("TX Nonce: %v\n", result.Details["txNonce"])
 	fmt.Printf("Auth Nonce: %v\n", result.Details["authNonce"])
+
+	// Wait and verify delegation
+	fmt.Println("\n--- Verifying Delegation ---")
+	fmt.Println("Waiting for transaction confirmation...")
+
+	// Poll for confirmation (up to 30 seconds)
+	verified := false
+	var finalCode []byte
+	for i := 0; i < 15; i++ {
+		time.Sleep(2 * time.Second)
+
+		codeAfter, err := tester.GetCode(accountAddr)
+		if err != nil {
+			fmt.Printf("  [%d/15] Checking... (error: %v)\n", i+1, err)
+			continue
+		}
+		finalCode = codeAfter
+
+		if len(codeAfter) == 23 && codeAfter[0] == 0xef && codeAfter[1] == 0x01 && codeAfter[2] == 0x00 {
+			actualTarget := common.BytesToAddress(codeAfter[3:])
+			if actualTarget == targetAddr {
+				fmt.Printf("  [%d/15] SUCCESS! Delegation confirmed.\n", i+1)
+				verified = true
+				break
+			} else {
+				fmt.Printf("  [%d/15] Delegated but to different target: %s\n", i+1, actualTarget.Hex())
+				break
+			}
+		} else if len(codeAfter) == 0 {
+			fmt.Printf("  [%d/15] Still EOA, waiting...\n", i+1)
+		} else {
+			// Account has contract code (not delegation code)
+			fmt.Printf("  [%d/15] Account has contract code (%d bytes)\n", i+1, len(codeAfter))
+			break
+		}
+	}
+
 	fmt.Println()
-	fmt.Println("SetCode transaction submitted successfully!")
-	fmt.Println("Note: Wait for transaction confirmation before using the delegated account.")
+	if verified {
+		fmt.Println("=== Delegation VERIFIED ===")
+		fmt.Printf("Account %s is now delegated to %s\n", accountAddr.Hex(), targetAddr.Hex())
+	} else {
+		fmt.Println("=== Delegation FAILED ===")
+		if len(finalCode) == 0 {
+			fmt.Println("Status: Account is still EOA (no code)")
+			fmt.Println("Reason: Transaction may be pending or rejected by node")
+		} else if len(finalCode) == 23 && finalCode[0] == 0xef && finalCode[1] == 0x01 && finalCode[2] == 0x00 {
+			actualTarget := common.BytesToAddress(finalCode[3:])
+			fmt.Printf("Status: Account is delegated to different target: %s\n", actualTarget.Hex())
+		} else {
+			fmt.Printf("Status: Account has contract code (%d bytes)\n", len(finalCode))
+			fmt.Printf("Code prefix: 0x%s\n", hex.EncodeToString(finalCode[:min(32, len(finalCode))]))
+			fmt.Println("Reason: Cannot delegate - account already has non-delegation contract code")
+		}
+	}
+}
+
+// runCAAuthorityTest tests that a Contract Account (with code) cannot be SetCode authority
+// This test requires:
+// 1. genesis.json with contract code pre-loaded at a known address
+// 2. CA_TEST_KEY environment variable with the private key for that address
+func runCAAuthorityTest(rpcURL string) {
+	fmt.Println("Testing CA Cannot Be SetCode Authority...")
+	fmt.Println("-----------------------------------------")
+	fmt.Println()
+	fmt.Println("This test verifies EIP-7702 validation rule:")
+	fmt.Println("  - Contract Account (CA) with code CANNOT sign SetCode authorization")
+	fmt.Println("  - Node should reject with: ErrAuthorizationDestinationHasCode")
+	fmt.Println()
+
+	// Get CA test key from environment
+	caTestKey := os.Getenv("CA_TEST_KEY")
+	if caTestKey == "" {
+		fmt.Fprintf(os.Stderr, "Error: CA_TEST_KEY environment variable not set\n")
+		fmt.Fprintf(os.Stderr, "\nThis test requires:\n")
+		fmt.Fprintf(os.Stderr, "  1. A genesis.json with contract code at a known address\n")
+		fmt.Fprintf(os.Stderr, "  2. CA_TEST_KEY set to the private key for that address\n")
+		fmt.Fprintf(os.Stderr, "\nRun 'make genesis-ca-entry' for setup instructions.\n")
+		os.Exit(1)
+	}
+
+	// Remove 0x prefix if present
+	caTestKey = strings.TrimPrefix(caTestKey, "0x")
+
+	fmt.Printf("RPC URL: %s\n", rpcURL)
+
+	// Create network tester with the CA test key
+	tester, err := inspector.NewNetworkTester(rpcURL, caTestKey)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating network tester: %v\n", err)
+		os.Exit(1)
+	}
+	defer tester.Close()
+
+	authorityAddr := tester.GetAddress()
+	fmt.Printf("Authority Address (should have code): %s\n", authorityAddr.Hex())
+	fmt.Printf("Chain ID: %s\n", tester.GetChainID().String())
+
+	// Verify the authority address has code
+	code, err := tester.GetCode(authorityAddr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting code: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(code) == 0 {
+		fmt.Fprintf(os.Stderr, "\nError: Authority address has NO code!\n")
+		fmt.Fprintf(os.Stderr, "This test requires the authority address to have contract code.\n")
+		fmt.Fprintf(os.Stderr, "Make sure genesis.json has code at: %s\n", authorityAddr.Hex())
+		os.Exit(1)
+	}
+
+	fmt.Printf("Authority Code Size: %d bytes\n", len(code))
+	fmt.Println()
+
+	// Use a dummy target address for delegation
+	// (The target doesn't matter - we're testing that the authority is rejected)
+	targetAddr := common.HexToAddress("0x0000000000000000000000000000000000000042")
+
+	fmt.Println("Attempting SetCode transaction with CA as authority...")
+	fmt.Println("Expected: Transaction REJECTED with ErrAuthorizationDestinationHasCode")
+	fmt.Println()
+
+	// Try to send SetCode transaction
+	result, err := tester.TestSetCodeTransaction(targetAddr)
+
+	// We EXPECT this to fail!
+	if err != nil {
+		errStr := err.Error()
+		// Check if the error is the expected one
+		if strings.Contains(errStr, "ErrAuthorizationDestinationHasCode") ||
+			strings.Contains(errStr, "authority has code") ||
+			strings.Contains(errStr, "destination has code") {
+			fmt.Println("=== TEST PASSED ===")
+			fmt.Println("✓ Node correctly rejected SetCode transaction")
+			fmt.Printf("✓ Error: %v\n", err)
+			fmt.Println()
+			fmt.Println("EIP-7702 CA validation is working correctly!")
+			os.Exit(0)
+		}
+		// Other errors might indicate connection issues
+		fmt.Printf("Transaction error: %v\n", err)
+	}
+
+	if result != nil && result.Error != nil {
+		errStr := result.Error.Error()
+		if strings.Contains(errStr, "ErrAuthorizationDestinationHasCode") ||
+			strings.Contains(errStr, "authority has code") ||
+			strings.Contains(errStr, "destination has code") {
+			fmt.Println("=== TEST PASSED ===")
+			fmt.Println("✓ Node correctly rejected SetCode transaction")
+			fmt.Printf("✓ Error: %v\n", result.Error)
+			fmt.Println()
+			fmt.Println("EIP-7702 CA validation is working correctly!")
+			os.Exit(0)
+		}
+	}
+
+	// If we get here, the transaction was NOT rejected as expected
+	fmt.Println("=== TEST FAILED ===")
+	fmt.Println("✗ SetCode transaction was NOT rejected!")
+	fmt.Println()
+	if result != nil {
+		fmt.Printf("TX Hash: %s\n", result.TxHash)
+		if result.Details != nil {
+			fmt.Printf("Status: %v\n", result.Details["status"])
+		}
+	}
+	fmt.Println()
+	fmt.Println("WARNING: Node did not reject SetCode from CA authority!")
+	fmt.Println("This may indicate a bug in the EIP-7702 implementation.")
+	os.Exit(1)
 }

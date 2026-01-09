@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "./interfaces/IEIP7702Account.sol";
-import "./interfaces/IEntryPoint.sol";
+import {IEIP7702Account} from "./interfaces/IEIP7702Account.sol";
+import {IEntryPoint, UserOperation, IAccount} from "./interfaces/IEntryPoint.sol";
 
 /// @title PaymasterHelper
 /// @notice Gas sponsorship integration for EIP-7702 delegated accounts
@@ -10,7 +10,7 @@ import "./interfaces/IEntryPoint.sol";
 /// @custom:eip-delegation This contract is designed for EIP-7702 code delegation
 contract PaymasterHelper is IEIP7702Account, IAccount {
     /// @notice The ERC-4337 EntryPoint
-    IEntryPoint public immutable entryPoint;
+    IEntryPoint public immutable ENTRY_POINT;
 
     /// @notice Trusted paymaster addresses
     mapping(address => bool) public trustedPaymasters;
@@ -45,9 +45,9 @@ contract PaymasterHelper is IEIP7702Account, IAccount {
     /// @notice Validation failed
     uint256 internal constant SIG_VALIDATION_FAILED = 1;
 
-    /// @param _entryPoint The ERC-4337 EntryPoint address
-    constructor(IEntryPoint _entryPoint) {
-        entryPoint = _entryPoint;
+    /// @param entryPoint_ The ERC-4337 EntryPoint address
+    constructor(IEntryPoint entryPoint_) {
+        ENTRY_POINT = entryPoint_;
     }
 
     /// @notice Add or remove a trusted paymaster
@@ -86,7 +86,7 @@ contract PaymasterHelper is IEIP7702Account, IAccount {
         bytes32 userOpHash,
         uint256 missingAccountFunds
     ) external override returns (uint256 validationData) {
-        if (msg.sender != address(entryPoint)) revert Unauthorized();
+        if (msg.sender != address(ENTRY_POINT)) revert Unauthorized();
 
         // Check if paymaster is trusted (if using a paymaster)
         if (userOp.paymasterAndData.length >= 20) {
@@ -147,7 +147,7 @@ contract PaymasterHelper is IEIP7702Account, IAccount {
         uint256 value,
         bytes calldata data
     ) external payable override returns (bytes memory) {
-        if (msg.sender != address(entryPoint) && msg.sender != address(this)) {
+        if (msg.sender != address(ENTRY_POINT) && msg.sender != address(this)) {
             revert Unauthorized();
         }
 
@@ -164,7 +164,7 @@ contract PaymasterHelper is IEIP7702Account, IAccount {
         uint256[] calldata values,
         bytes[] calldata datas
     ) external payable override returns (bytes[] memory results) {
-        if (msg.sender != address(entryPoint) && msg.sender != address(this)) {
+        if (msg.sender != address(ENTRY_POINT) && msg.sender != address(this)) {
             revert Unauthorized();
         }
 
@@ -185,17 +185,17 @@ contract PaymasterHelper is IEIP7702Account, IAccount {
 
     /// @notice Check if authorized
     function isAuthorized(address signer) external view override returns (bool) {
-        return signer == address(this) || signer == address(entryPoint);
+        return signer == address(this) || signer == address(ENTRY_POINT);
     }
 
     /// @notice Get deposit at EntryPoint
     function getDeposit() public view returns (uint256) {
-        return entryPoint.balanceOf(address(this));
+        return ENTRY_POINT.balanceOf(address(this));
     }
 
     /// @notice Add deposit to EntryPoint
     function addDeposit() public payable {
-        entryPoint.depositTo{value: msg.value}(address(this));
+        ENTRY_POINT.depositTo{value: msg.value}(address(this));
     }
 
     receive() external payable {}
